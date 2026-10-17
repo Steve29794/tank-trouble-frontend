@@ -1,0 +1,31 @@
+.stat-head {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) repeat(3, 38px);
+  gap: 8px;
+  padding: 12px 0 5px 18px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.stat-head span:first-child {
+  text-align: left;
+}
+.players article {
+  gap: 8px;
+}
+.players article .player-name {
+  flex: 1;
+  min-width: 70px;
+}
+.players .player-stat {
+  width: 38px;
+  flex: none;
+  color: var(--paper);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.players .player-stat.kd {
+  color: var(--amber);
+}

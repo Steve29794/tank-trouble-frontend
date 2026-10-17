@@ -1,0 +1,137 @@
+:root {
+  --ink: #f4f6f3;
+  --paper: #222c30;
+  --muted: #69777d;
+  --line: #d5dcda;
+  --amber: #c49a22;
+  --orange: #c65b36;
+  --green: #3a9a70;
+}
+body,
+.lobby,
+.game-page {
+  background: #f4f6f3;
+  color: #222c30;
+}
+.lobby {
+  background: linear-gradient(120deg, #f4f6f3, #e9eeeb 60%, #f4f6f3);
+}
+.auth-shell {
+  background: #f4f6f3;
+}
+.auth-card {
+  background: #f4f6f3;
+}
+.auth-aside {
+  background: radial-gradient(circle at 50% 45%, #e5ebe8 0, #f4f6f3 55%);
+}
+.panel {
+  background: #fff;
+}
+.lobby-grid {
+  background: #d5dcda;
+}
+input,
+select {
+  background: #fff;
+  color: #222c30;
+  border-color: #cbd4d1;
+}
+.primary-button {
+  background: #c49a22;
+  color: #fff;
+  border-color: #b58c17;
+}
+.primary-button:hover {
+  background: #ad8519;
+}
+.outline-button {
+  color: #8c6d11;
+  border-color: #c49a22;
+}
+.outline-button:hover {
+  background: #c49a2212;
+}
+.logo {
+  color: #222c30;
+}
+.profile,
+.profile button,
+.text-link,
+.back-link {
+  color: #69777d;
+}
+.avatar,
+.brand-mark {
+  background: #c49a22;
+  color: #fff;
+}
+.auth-aside strong,
+.panel h2,
+.section-title h2 {
+  color: #222c30;
+}
+.live-chip,
+.empty-state {
+  background: #fff;
+}
+.canvas-wrap {
+  background: #eef1ef;
+  border-color: #cbd4d1;
+}
+.scoreboard {
+  border-color: #d5dcda;
+}
+.round-label,
+.players article {
+  border-color: #d5dcda;
+}
+.canvas-hint {
+  color: #58666b;
+}
+.room-row {
+  border-color: #d5dcda;
+}
+.rules-mini {
+  border-color: #d5dcda;
+}
+.join-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+.join-form input:first-child {
+  max-width: 150px;
+}
+.join-form input:nth-child(2) {
+  min-width: 140px;
+  flex: 1;
+}
+.room-list-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 800px) {
+  .join-form input:first-child {
+    max-width: none;
+    flex: 1;
+  }
+  .room-list-tools {
+    margin-top: 12px;
+  }
+}
+.auth-aside .radar {
+  border-color: #9a7a18aa;
+  background: repeating-radial-gradient(circle, transparent 0 72px, #9a7a1840 73px 75px), conic-gradient(from 20deg, transparent 0 24%, #c65b3638 25%, transparent 26% 100%);
+  opacity: 0.9;
+}
+.auth-aside .grid-art {
+  background:
+    linear-gradient(90deg, #3a6e6970 1px, transparent 1px) 0 0/40px 40px,
+    linear-gradient(#3a6e6970 1px, transparent 1px) 0 0/40px 40px;
+  opacity: 0.85;
+}
