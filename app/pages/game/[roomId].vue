@@ -2,9 +2,7 @@
 const route = useRoute();
 const { token, user } = useAuth();
 const roomId = String(route.params.roomId);
-onMounted(() => {
-  if (!token.value) navigateTo("/login");
-});
+useHead({ title: `房间 ${roomId} | 坦克动荡` });
 </script>
 <template>
   <main class="game-page">

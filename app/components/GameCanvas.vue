@@ -5,21 +5,27 @@ const canvas = ref(null);
 const connected = ref(false);
 const room = ref(null);
 const playerId = ref("");
-const state = reactive({ maze: null, players: [], bullets: [], pickups: [], explosions: [] });
+const state = reactive({ maze: null, players: [], bullets: [], pickups: [], traps: [], explosions: [], lasers: [], laserAims: [] });
 const keys = reactive({ w: false, s: false });
 let socket;
 let frame;
 let fire = false;
+let placeTrap = false;
 let mouse = { x: 0, y: 0 };
+let hasMouse = false;
 let renderPlayers = [];
 let renderBullets = [];
 let lastSnapshotAt = 0;
+const pickupImages = new Map();
+const weaponNames = { laser: "激光", fragmentBomb: "碎片炸弹", wifi: "WIFI 弹", gatling: "加特林", tracking: "追踪导弹" };
 
 const isOwner = computed(() => room.value?.ownerId === playerId.value);
 function send() {
   const angle = currentAngle();
-  if (socket?.readyState === 1) socket.send(JSON.stringify({ type: "input", keys, angle, fire }));
-  fire = false;
+  if (socket?.readyState === 1) {
+    socket.send(JSON.stringify({ type: "input", keys, angle, aimAngle: angle, ...(hasMouse ? { aimX: mouse.x, aimY: mouse.y } : {}), fire, placeTrap }));
+  }
+  placeTrap = false;
 }
 function currentAngle() {
   const me = renderPlayers.find((player) => player.id === playerId.value);
@@ -27,7 +33,11 @@ function currentAngle() {
 }
 function connect() {
   const httpUrl = new URL(config.public.apiBase);
-  const url = new URL((httpUrl.protocol === "https:" ? "wss:" : "ws:") + "//" + httpUrl.host + "/ws");
+  // const url = new URL((httpUrl.protocol === "https:" ? "wss:" : "ws:") + "//" + httpUrl.host + "/ws");
+  const wsProto = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+  const wsPath = httpUrl.pathname.replace(/\/$/, "") + "/ws";
+  const url = new URL(`${wsProto}//${httpUrl.host}${wsPath}`);
+
   url.searchParams.set("room", props.roomId);
   url.searchParams.set("token", props.token);
   socket = new WebSocket(url);
@@ -53,6 +63,8 @@ function connect() {
     if (message.type === "round_start") {
       renderBullets = [];
       state.bullets = [];
+      state.traps = [];
+      state.lasers = [];
     }
     if (message.type === "state") {
       const now = performance.now();
@@ -64,6 +76,14 @@ function connect() {
       lastSnapshotAt = now;
       state.players = renderPlayers;
       state.pickups = message.pickups;
+      state.traps = message.traps || [];
+      state.laserAims = message.laserAims || [];
+    }
+    if (message.type === "lasers") {
+      state.lasers = message.beams || [];
+    }
+    if (message.type === "laser_aims") {
+      state.laserAims = message.aims || [];
     }
     if (message.type === "projectiles") {
       const now = performance.now();
@@ -112,9 +132,11 @@ function aim(event) {
   if (!view) return;
   const rect = canvas.value.getBoundingClientRect();
   mouse = { x: (event.clientX - rect.left - view.ox) / view.scale, y: (event.clientY - rect.top - view.oy) / view.scale };
+  hasMouse = true;
 }
-function key(value, down) {
+function key(value, down, repeat = false) {
   if (value === "w" || value === "s") keys[value] = down;
+  if (value === "e" && down && !repeat) placeTrap = true;
 }
 function updateInterpolation(now) {
   const playerBlend = Math.max(0, Math.min(1, (now - lastSnapshotAt) / 115));
@@ -176,44 +198,150 @@ function draw() {
     ctx.stroke();
     ctx.globalAlpha = 1;
   });
-  state.pickups.forEach((pickup) => {
-    ctx.fillStyle = pickup.type === "shield" ? "#49aa7f" : "#d66b36";
+  state.lasers.forEach((laser) => {
+    ctx.save();
+    ctx.globalAlpha = laser.alpha ?? 1;
+    ctx.strokeStyle = "#f04444";
+    ctx.lineWidth = Math.max(2, view.scale * 0.035);
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(view.ox + pickup.x * view.scale, view.oy + pickup.y * view.scale, view.scale * 0.2, 0, Math.PI * 2);
-    ctx.fill();
+    for (const segment of laser.segments) {
+      ctx.moveTo(view.ox + segment.x1 * view.scale, view.oy + segment.y1 * view.scale);
+      ctx.lineTo(view.ox + segment.x2 * view.scale, view.oy + segment.y2 * view.scale);
+    }
+    ctx.stroke();
+    ctx.restore();
+  });
+  state.pickups.forEach((pickup) => {
+    const image = pickupImages.get(pickup.type);
+    const size = view.scale * 0.42;
+    if (image?.complete && image.naturalWidth) {
+      ctx.drawImage(image, view.ox + pickup.x * view.scale - size / 2, view.oy + pickup.y * view.scale - size / 2, size, size);
+    } else {
+      ctx.fillStyle = "#d66b36";
+      ctx.beginPath();
+      ctx.arc(view.ox + pickup.x * view.scale, view.oy + pickup.y * view.scale, size * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  state.traps.forEach((trap) => {
+    const image = pickupImages.get("trap");
+    if (!image?.complete || !image.naturalWidth) return;
+    const size = view.scale * 0.35;
+    ctx.save();
+    ctx.globalAlpha = trap.opacity;
+    ctx.drawImage(image, view.ox + trap.x * view.scale - size / 2, view.oy + trap.y * view.scale - size / 2, size, size);
+    ctx.restore();
   });
   state.bullets.forEach((bullet) => {
-    ctx.fillStyle = "#cc7d20";
+    const x = view.ox + bullet.x * view.scale;
+    const y = view.oy + bullet.y * view.scale;
+    if (bullet.kind === "shard") {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(bullet.angle || Math.atan2(bullet.vy, bullet.vx));
+      ctx.fillStyle = "#e95d8e";
+      ctx.beginPath();
+      ctx.moveTo(view.scale * 0.065, 0);
+      ctx.lineTo(-view.scale * 0.04, -view.scale * 0.035);
+      ctx.lineTo(-view.scale * 0.03, view.scale * 0.04);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (bullet.kind === "wifi" || bullet.kind === "tracking") {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.atan2(bullet.vy, bullet.vx));
+      ctx.fillStyle = bullet.kind === "wifi" ? "#55c7d9" : "#79c95b";
+      ctx.beginPath();
+      ctx.moveTo(view.scale * 0.12, 0);
+      ctx.lineTo(-view.scale * 0.075, -view.scale * 0.065);
+      ctx.lineTo(-view.scale * 0.055, view.scale * 0.065);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    ctx.fillStyle = bullet.kind === "fragmentBomb" ? "#e95d8e" : "#4a4a4a";
     ctx.beginPath();
-    ctx.arc(view.ox + bullet.x * view.scale, view.oy + bullet.y * view.scale, view.scale * 0.045, 0, Math.PI * 2);
+    ctx.arc(x, y, view.scale * (bullet.kind === "fragmentBomb" ? 0.085 : bullet.kind === "gatling" ? 0.025 : 0.045), 0, Math.PI * 2);
     ctx.fill();
   });
   renderPlayers.forEach((player) => {
     if (!player.alive) return;
+    const centerX = view.ox + player.x * view.scale;
+    const centerY = view.oy + player.y * view.scale;
+    if (player.weapon === "laser") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(235, 73, 69, 0.75)";
+      ctx.lineWidth = Math.max(1, view.scale * 0.018);
+      ctx.setLineDash([view.scale * 0.09, view.scale * 0.07]);
+      ctx.beginPath();
+      for (const segment of state.laserAims.find((aim) => aim.id === player.id)?.segments || []) {
+        ctx.moveTo(view.ox + segment.x1 * view.scale, view.oy + segment.y1 * view.scale);
+        ctx.lineTo(view.ox + segment.x2 * view.scale, view.oy + segment.y2 * view.scale);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.save();
-    ctx.translate(view.ox + player.x * view.scale, view.oy + player.y * view.scale);
+    ctx.translate(centerX, centerY);
     ctx.rotate(player.angle);
-    ctx.fillStyle = player.id === playerId.value ? "#d1a82d" : "#bd5148";
+    ctx.fillStyle = player.color || (player.id === playerId.value ? "#d1a82d" : "#bd5148");
     ctx.fillRect(-view.scale * 0.18, -view.scale * 0.13, view.scale * 0.36, view.scale * 0.26);
     ctx.fillStyle = "#293238";
     ctx.fillRect(0, -view.scale * 0.035, view.scale * 0.24, view.scale * 0.07);
-    if (player.shield) {
-      ctx.strokeStyle = "#49aa7f";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, view.scale * 0.32, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    ctx.restore();
+
+    const labelY = view.oy + player.y * view.scale - view.scale * 0.21;
+    const fontSize = Math.max(10, Math.min(14, view.scale * 0.14));
+    ctx.save();
+    ctx.font = `600 ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const labelWidth = ctx.measureText(player.username).width + 10;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.fillRect(centerX - labelWidth / 2, labelY - fontSize * 0.72, labelWidth, fontSize * 1.45);
+    ctx.strokeStyle = player.color || "#59636a";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(centerX - labelWidth / 2, labelY - fontSize * 0.72, labelWidth, fontSize * 1.45);
+    ctx.fillStyle = player.color || "#293238";
+    ctx.fillText(player.username, centerX, labelY);
     ctx.restore();
   });
   frame = requestAnimationFrame(draw);
 }
 onMounted(() => {
+  for (const [type, asset] of Object.entries({
+    laser: "laser",
+    fragmentBomb: "fragment-bomb",
+    wifi: "wifi-shell",
+    gatling: "gatling",
+    tracking: "tracking-missile",
+    trap: "trap-mine",
+  })) {
+    const image = new Image();
+    const basePath = config.app.baseURL || "/";
+    image.src = `${basePath.replace(/\/?$/, "/")}assets/pickups/${asset}.svg`;
+    pickupImages.set(type, image);
+  }
   connect();
-  const down = (event) => key(event.key.toLowerCase(), true),
-    up = (event) => key(event.key.toLowerCase(), false);
+  const down = (event) => key(event.key.toLowerCase(), true, event.repeat),
+    up = (event) => key(event.key.toLowerCase(), false, event.repeat);
+  const releaseFire = () => {
+    fire = false;
+  };
+  const releaseOnBlur = () => {
+    fire = false;
+    keys.w = false;
+    keys.s = false;
+  };
   window.addEventListener("keydown", down);
   window.addEventListener("keyup", up);
+  window.addEventListener("mouseup", releaseFire);
+  window.addEventListener("blur", releaseOnBlur);
   frame = requestAnimationFrame(draw);
   const timer = setInterval(send, 50);
   onUnmounted(() => {
@@ -221,6 +349,8 @@ onMounted(() => {
     cancelAnimationFrame(frame);
     window.removeEventListener("keydown", down);
     window.removeEventListener("keyup", up);
+    window.removeEventListener("mouseup", releaseFire);
+    window.removeEventListener("blur", releaseOnBlur);
     socket?.close();
   });
 });
@@ -235,8 +365,9 @@ onMounted(() => {
           aim($event);
           fire = true;
         "
+        @mouseup="fire = false"
       ></canvas>
-      <div class="canvas-hint">W 前进 · S 后退 · 鼠标瞄准 · 左键发射</div>
+      <div class="canvas-hint">W / S 移动 · 鼠标瞄准 · 按住左键攻击 · E 放置陷阱</div>
     </div>
     <aside class="scoreboard">
       <div class="connection"><span :class="['status-dot', { offline: !connected }]" /> {{ connected ? "已连接" : "连接中" }}</div>
@@ -246,10 +377,14 @@ onMounted(() => {
       <div class="stat-head"><span>玩家</span><span>击杀</span><span>死亡</span><span>K/D</span></div>
       <div class="players">
         <article v-for="player in room?.players || []" :key="player.id" :class="{ mine: player.id === playerId }">
-          <span class="player-color"></span>
+          <span class="player-color" :style="{ backgroundColor: player.color }"></span>
           <div class="player-name">
             <strong>{{ player.username }} <i v-if="player.id === room?.ownerId">主</i></strong
-            ><small>{{ player.connected ? "在线" : "离线" }}</small>
+            ><small
+              >{{ player.connected ? "在线" : "离线"
+              }}<template v-if="player.weapon && player.weapon !== 'normal'"> · {{ weaponNames[player.weapon] }} x{{ player.weaponAmmo }}</template
+              ><template v-if="player.trapAmmo"> · 地雷 x{{ player.trapAmmo }}</template></small
+            >
           </div>
           <b class="player-stat">{{ player.kills || 0 }}</b
           ><b class="player-stat">{{ player.deaths || 0 }}</b

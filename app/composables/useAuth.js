@@ -18,6 +18,17 @@ export function useAuth() {
       localStorage.setItem("tank-user", JSON.stringify(data.user));
     }
   };
+  const hydrateSession = () => {
+    if (!import.meta.client) return;
+    if (!token.value) token.value = localStorage.getItem("tank-token") || "";
+    if (!user.value) {
+      try {
+        user.value = JSON.parse(localStorage.getItem("tank-user") || "null");
+      } catch {
+        user.value = null;
+      }
+    }
+  };
   const logout = () => {
     token.value = "";
     user.value = null;
@@ -27,5 +38,5 @@ export function useAuth() {
     }
     navigateTo("/login");
   };
-  return { token, user, api, setSession, logout };
+  return { token, user, api, setSession, hydrateSession, logout };
 }

@@ -1,5 +1,6 @@
 <script setup>
 const { api, setSession } = useAuth();
+useHead({ title: "登录 | 坦克动荡" });
 const form = reactive({ username: "", password: "" });
 const error = ref("");
 const loading = ref(false);

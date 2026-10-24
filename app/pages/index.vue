@@ -1,5 +1,6 @@
 <script setup>
 const { api, user, token, logout } = useAuth();
+useHead({ title: "游戏大厅 | 坦克动荡" });
 const rooms = ref([]);
 const roomCode = ref("");
 const roomPassword = ref("");
@@ -10,7 +11,6 @@ const creating = ref(false);
 const refreshing = ref(false);
 const joining = ref(false);
 onMounted(async () => {
-  if (!token.value) return navigateTo("/login");
   try {
     await refreshRooms();
   } catch {
